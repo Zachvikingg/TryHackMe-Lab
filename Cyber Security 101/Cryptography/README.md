@@ -95,3 +95,79 @@ Do mã hóa bất đối xứng sử dụng các phép toán lũy thừa số ng
 ## V. Kỹ thuật bẻ khóa mã băm (Hash Cracking)
 
 Do cấu trúc toán học một chiều, kẻ tấn công không thể áp dụng công thức để "giải mã" ngược chuỗi băm. Cách duy nhất để tìm lại mật khẩu văn bản thô (Plaintext) là sử dụng kỹ thuật đoán mò và đối chiếu kết quả băm:
+### 1. Các phương pháp tấn công chính
+* **Brute-Force Attack:** Thử nghiệm tất cả các tổ hợp ký tự có thể có dựa trên một tập luật quy định (Ví dụ: thử toàn bộ chuỗi từ 1 đến 8 ký tự bao gồm chữ cái, chữ số, ký tự đặc biệt). Độ chính xác 100% nhưng cực kỳ tốn thời gian đối với các mật khẩu dài.
+* **Dictionary Attack (Tấn công từ điển):** Thay vì thử ngẫu nhiên, kẻ tấn công nạp vào một danh sách hàng triệu mật khẩu phổ biến đã được tổng hợp từ các vụ rò rỉ dữ liệu thực tế (Wordlist - tiêu biểu là tệp `rockyou.txt`). Công cụ sẽ băm từng từ trong file này rồi đối chiếu. Phương pháp này có tốc độ xử lý nhanh và tỷ lệ thành công rất cao đối với người dùng đặt mật khẩu yếu.
+
+---
+
+## VI. Thực hành công cụ: John the Ripper (JTR)
+
+[John the Ripper](https://tryhackme.com/room/johntheripper0) là một công cụ mã nguồn mở cực kỳ mạnh mẽ chuyên dùng để kiểm tra độ an toàn của mật khẩu và bẻ khóa mã băm.
+
+### 1. Các câu lệnh vận hành cơ bản
+
+* **Tấn công tự động (Tự nhận diện loại hash):**
+    ```bash
+    john [path_to_file_chứa_hash.txt]
+    ```
+    *Ưu điểm:* Tiện lợi khi bạn không biết chuỗi băm thuộc định dạng nào. John sẽ dựa vào độ dài và cấu trúc ký tự để phán đoán.
+
+* **Tấn công bằng từ điển (Sử dụng Wordlist):**
+    ```bash
+    john --wordlist=/usr/share/wordlists/rockyou.txt [path_to_file_chứa_hash.txt]
+    ```
+
+* **Chỉ định định dạng Hash cụ thể (Tối ưu hiệu năng & tốc độ):**
+    Nếu bạn đã biết rõ loại hash thông qua các công cụ nhận diện (như `hash-identifier`), hãy chỉ định trực tiếp định dạng để JTR không tốn thời gian thử các bộ giải mã khác:
+    ```bash
+    john --format=raw-md5 --wordlist=rockyou.txt hash.txt
+    ```
+    *Các định dạng phổ biến thường gặp khi thi đấu CTF hoặc Pentest:*
+    * `raw-md5` (MD5 thô)
+    * `raw-sha256` (SHA-256 thô)
+    * `nt` (Mã băm NTLM trên hệ thống Windows)
+    * `descrypt` / `md5crypt` (Thường thấy trong file `/etc/shadow` của Linux)
+
+* **Hiển thị kết quả đã bẻ khóa thành công:**
+    Theo mặc định, sau khi bẻ khóa thành công, JTR sẽ lưu kết quả vào file ẩn hệ thống và không hiển thị lại nếu bạn chạy lệnh cũ. Để xem lại toàn bộ mật khẩu đã tìm được:
+    ```bash
+    john --show [path_to_file_chứa_hash.txt]
+    ```
+
+---
+
+## VII. Kỹ thuật nâng cao: Bẻ khóa File định dạng mật mã (`*2john`)
+
+John the Ripper không thể xử lý trực tiếp các tệp tin nén (ZIP, RAR) hay các file khóa bảo mật (SSH Private Key). Để bẻ khóa mật khẩu bảo vệ của các file này, bạn bắt buộc phải trích xuất phần dữ liệu băm (Hash) của chúng ra trước dưới dạng văn bản thô bằng các công cụ bổ trợ đi kèm:
+
+### 1. Bẻ khóa mật khẩu file nén ZIP
+* **Bước 1:** Trích xuất chuỗi băm của file ZIP ra file text:
+    ```bash
+    zip2john protected_file.zip > zip_hash.txt
+    ```
+* **Bước 2:** Dùng từ điển để bẻ khóa mật khẩu dựa trên file hash vừa trích xuất:
+    ```bash
+    john --wordlist=/usr/share/wordlists/rockyou.txt zip_hash.txt
+    ```
+
+### 2. Bẻ khóa mật khẩu file nén RAR
+* **Bước 1:** Trích xuất chuỗi băm của file RAR:
+    ```bash
+    rar2john private_data.rar > rar_hash.txt
+    ```
+* **Bước 2:** Thực hiện bẻ khóa bằng JTR:
+    ```bash
+    john --wordlist=/usr/share/wordlists/rockyou.txt rar_hash.txt
+    ```
+
+### 3. Bẻ khóa mật khẩu Passphrase của SSH Private Key
+Khi một Chuyên viên kiểm thử thu thập được file khóa bí mật SSH (`id_rsa`) nhưng file này lại bị cài thêm lớp mật khẩu bảo vệ (Passphrase):
+* **Bước 1:** Chuyển đổi cấu trúc file khóa sang định dạng hash mà JTR hiểu được:
+    ```bash
+    ssh2john id_rsa > ssh_hash.txt
+    ```
+* **Bước 2:** Bẻ khóa để tìm passphrase văn bản thô:
+    ```bash
+    john --wordlist=/usr/share/wordlists/rockyou.txt ssh_hash.txt
+    ```
